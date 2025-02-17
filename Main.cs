@@ -2,67 +2,36 @@
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Linq;
-    using System.Globalization;
     using System.Drawing;
+    using System.Globalization;
+    using System.Linq;
+    using System.Reflection;
     using QuantConnect;
+    using QuantConnect.Algorithm;
     using QuantConnect.Algorithm.Framework;
-    using QuantConnect.Algorithm.Framework.Selection;
     using QuantConnect.Algorithm.Framework.Alphas;
+    using QuantConnect.Algorithm.Framework.Execution;
     using QuantConnect.Algorithm.Framework.Portfolio;
     using QuantConnect.Algorithm.Framework.Portfolio.SignalExports;
-    using QuantConnect.Algorithm.Framework.Execution;
     using QuantConnect.Algorithm.Framework.Risk;
+    using QuantConnect.Algorithm.Framework.Selection;
     using QuantConnect.Algorithm.Selection;
     using QuantConnect.Api;
-    using QuantConnect.Parameters;
     using QuantConnect.Benchmarks;
     using QuantConnect.Brokerages;
     using QuantConnect.Commands;
     using QuantConnect.Configuration;
-    using QuantConnect.Util;
-    using QuantConnect.Interfaces;
-    using QuantConnect.Algorithm;
-    using QuantConnect.Indicators;
     using QuantConnect.Data;
     using QuantConnect.Data.Auxiliary;
     using QuantConnect.Data.Consolidators;
     using QuantConnect.Data.Custom;
     using QuantConnect.Data.Custom.IconicTypes;
-    using QuantConnect.DataSource;
     using QuantConnect.Data.Fundamental;
     using QuantConnect.Data.Market;
     using QuantConnect.Data.Shortable;
     using QuantConnect.Data.UniverseSelection;
-    using QuantConnect.Notifications;
-    using QuantConnect.Orders;
-    using QuantConnect.Orders.Fees;
-    using QuantConnect.Orders.Fills;
-    using QuantConnect.Orders.OptionExercise;
-    using QuantConnect.Orders.Slippage;
-    using QuantConnect.Orders.TimeInForces;
-    using QuantConnect.Python;
-    using QuantConnect.Scheduling;
-    using QuantConnect.Securities;
-    using QuantConnect.Securities.Equity;
-    using QuantConnect.Securities.Future;
-    using QuantConnect.Securities.Option;
-    using QuantConnect.Securities.Positions;
-    using QuantConnect.Securities.Forex;
-    using QuantConnect.Securities.Crypto;
-    using QuantConnect.Securities.CryptoFuture;
-    using QuantConnect.Securities.IndexOption;
-    using QuantConnect.Securities.Interfaces;
-    using QuantConnect.Securities.Volatility;
-    using QuantConnect.Storage;
-    using QuantConnect.Statistics;
-    using QCAlgorithmFramework = QuantConnect.Algorithm.QCAlgorithm;
-    using QCAlgorithmFrameworkBridge = QuantConnect.Algorithm.QCAlgorithm;
-    using Calendar = QuantConnect.Data.Consolidators.Calendar;
-    using System.Reflection;
+    using QuantConnect.DataSource;
 #endregion
-using QuantConnect.DataSource;
-
 namespace QuantConnect.Algorithm.CSharp
 {
     public class JumpingRedOrangePenguin : QCAlgorithm
@@ -73,9 +42,9 @@ namespace QuantConnect.Algorithm.CSharp
         public override void Initialize()
         {
             QuantConnect.Logging.Log.DebuggingEnabled = true;
-            SetStartDate(2024, 03, 28); //Set Start Date
+            SetStartDate(2024, 06, 2); //Set Start Date
             Log("[Initialize] Start Date: " + Time.ToString());
-            SetEndDate(2024, 03, 29); //Set End Date
+            SetEndDate(2024, 06, 3); //Set End Date
             Log("[Initialize] End Date: " + Time.ToString());
             SetCash(100000);
             Log("[Initialize] Cash: " + Portfolio.Cash);
@@ -103,14 +72,20 @@ namespace QuantConnect.Algorithm.CSharp
             while (type != null)
             {
                 // try to get field
-                FieldInfo field = type.GetField(memberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                FieldInfo field = type.GetField(
+                    memberName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                );
                 if (field != null)
                 {
                     return field.GetValue(obj);
                 }
 
                 // try to get property
-                PropertyInfo property = type.GetProperty(memberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                PropertyInfo property = type.GetProperty(
+                    memberName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                );
                 if (property != null)
                 {
                     return property.GetValue(obj);
@@ -119,7 +94,9 @@ namespace QuantConnect.Algorithm.CSharp
                 type = type.BaseType;
             }
 
-            throw new ArgumentException($"Member '{memberName}' does not exist in type '{obj.GetType()}' or its base class");
+            throw new ArgumentException(
+                $"Member '{memberName}' does not exist in type '{obj.GetType()}' or its base class"
+            );
         }
 
         /// OnData event is the primary entry point for your algorithm. Each new data point will be pumped in here.
@@ -145,22 +122,32 @@ DataFeeds.CachingOptionChainProvider: private readonly IOptionChainProvider _opt
                 // get type of OptionChainProvider
                 var optionChainProvider = this.OptionChainProvider;
                 Log($"[OnData] type(OptionChainProvider): {optionChainProvider.GetType()}");
-                var contracts = OptionChainProvider.GetOptionContractList(this.underlying, new DateTime(2024, 03, 28));
-                Log($"[OnData] Available contracts by OptionChainProvider.GetOptionContractList(underlying, ...): {contracts.Count()}");
+                var contracts = OptionChainProvider.GetOptionContractList(
+                    underlying,
+                    new DateTime(2024, 06, 2)
+                );
+                Log(
+                    $"[OnData] Available contracts by OptionChainProvider.GetOptionContractList(underlying, ...): {contracts.Count()}"
+                );
+
+                var chain_contracts = this.OptionChain(this.underlying).ToList();
+                Log(
+                    $"[OnData] Available contracts by OptionChain(underlying): {chain_contracts.Count()}"
+                );
 
                 Log("[OnData]   ------------------- Reflection [Start] -------------------");
                 // get value of _optionChainProvider field (BacktestingOptionChainProvider)
-                var backtestingOptionChainProvider = GetMemberValue(optionChainProvider, "_optionChainProvider");
-                Log($"[OnData]   type(OptionChainProvider._optionChainProvider): {backtestingOptionChainProvider.GetType()}");
+                // var backtestingOptionChainProvider = GetMemberValue(optionChainProvider, "_optionChainProvider");
+                // Log($"[OnData]   type(OptionChainProvider._optionChainProvider): {backtestingOptionChainProvider.GetType()}");
                 // get DataCacheProvider property of the base class BacktestingChainProvider of BacktestingOptionChainProvider
-                var dataCacheProvider = GetMemberValue(backtestingOptionChainProvider, "DataCacheProvider");
-                Log($"[OnData]   type(_optionChainProvider.DataCacheProvider): {dataCacheProvider.GetType()}");
+                // var dataCacheProvider = GetMemberValue(backtestingOptionChainProvider, "DataCacheProvider");
+                // Log($"[OnData]   type(_optionChainProvider.DataCacheProvider): {dataCacheProvider.GetType()}");
                 // get _dataProvider field of ZipDataCacheProvider (DownloaderDataProvider)
-                var dataProvider = GetMemberValue(dataCacheProvider, "_dataProvider");
-                Log($"[OnData]   type(DataCacheProvider._dataProvider): {dataProvider.GetType()}");
+                // var dataProvider = GetMemberValue(dataCacheProvider, "_dataProvider");
+                // Log($"[OnData]   type(DataCacheProvider._dataProvider): {dataProvider.GetType()}");
                 // get _dataDownloader field of DownloaderDataProvider
-                var dataDownloader = GetMemberValue(dataProvider, "_dataDownloader");
-                Log($"[OnData]   type(_dataProvider._dataDownloader): {dataDownloader.GetType()}");
+                // var dataDownloader = GetMemberValue(dataProvider, "_dataDownloader");
+                // Log($"[OnData]   type(_dataProvider._dataDownloader): {dataDownloader.GetType()}");
                 Log("[OnData]   ------------------- Reflection [End] -------------------");
             }
             catch (Exception ex)
